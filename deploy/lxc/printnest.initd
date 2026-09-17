@@ -1,0 +1,39 @@
+#!/sbin/openrc-run
+# OpenRC init script for PrintNest on Alpine Linux.
+# Debian/systemd equivalent: deploy/lxc/printnest.service
+# Installed by deploy/lxc/install-alpine.sh to /etc/init.d/printnest.
+
+name="printnest"
+description="PrintNest self-hosted print portal"
+
+command="/usr/local/bin/printnest"
+command_user="printnest:printnest"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/${RC_SVCNAME}.log"
+error_log="/var/log/${RC_SVCNAME}.log"
+
+# Overridable in /etc/conf.d/printnest
+: "${CONFIG_FILE:=/var/lib/printnest/config.env}"
+
+depend() {
+	need net
+	use cupsd dbus avahi-daemon
+	after cupsd
+}
+
+start_pre() {
+	if [ ! -f "$CONFIG_FILE" ]; then
+		eerror "Missing $CONFIG_FILE (copy deploy/lxc/config.env.example and set PRINTNEST_PASSWORD)"
+		return 1
+	fi
+	checkpath -d -o printnest:printnest -m 0755 \
+		/var/lib/printnest /var/lib/printnest/uploads
+	checkpath -f -o printnest:printnest -m 0644 \
+		"$output_log" "$error_log"
+	set -a
+	# shellcheck disable=SC1090
+	. "$CONFIG_FILE"
+	set +a
+	chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+}

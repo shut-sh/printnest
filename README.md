@@ -8,13 +8,24 @@ Flow: Choose / Share file -> Preview -> Configure -> Print.
 
 ## Quick start (native LXC, no Docker)
 
-On a fresh Debian/Ubuntu LXC (Proxmox):
+Debian/Ubuntu LXC (Proxmox):
 
 ```sh
 sudo bash deploy/lxc/install.sh
 sudoedit /var/lib/printnest/config.env   # set PRINTNEST_PASSWORD
 sudo systemctl restart printnest
 ```
+
+Alpine LXC (Proxmox, OpenRC instead of systemd):
+
+```sh
+sh deploy/lxc/install-alpine.sh          # INSTALL_HPLIP=0 for driverless-only, smaller
+vi /var/lib/printnest/config.env         # set PRINTNEST_PASSWORD
+rc-service printnest restart
+```
+
+mDNS discovery (network scan) on Alpine needs `avahi`+`dbus` running;
+direct `ipp://` add works without them.
 
 Add the DeskJet (driverless first, hplip fallback):
 
