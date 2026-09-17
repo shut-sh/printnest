@@ -1,0 +1,19 @@
+[Unit]
+Description=PrintNest self-hosted print portal
+After=network.target cups.service
+Wants=cups.service
+
+[Service]
+Type=simple
+User=printnest
+Group=printnest
+EnvironmentFile=/var/lib/printnest/config.env
+ExecStart=/usr/local/bin/printnest
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/printnest
+
+[Install]
+WantedBy=multi-user.target
