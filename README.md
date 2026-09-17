@@ -8,10 +8,22 @@ Flow: Choose / Share file -> Preview -> Configure -> Print.
 
 ## Quick start (native LXC, no Docker)
 
-Debian/Ubuntu LXC (Proxmox):
+Install from a prebuilt release bundle (recommended, no build tools on
+the LXC). One static binary runs on both Debian/glibc and Alpine/musl;
+the installer for each distro only copies the binary, the built
+`frontend/dist`, and the service/config files.
+
+Download `printnest-<version>-linux-<arch>.tar.gz` (+ `.sha256`) from the
+[GitHub release](https://github.com/shut-sh/printnest/releases), verify the
+checksum, then run the installer with `BUNDLE_FILE` (or `RELEASE_TAG`/
+`BUNDLE_URL` to fetch it automatically):
+
+Debian/Ubuntu LXC (Proxmox, systemd):
 
 ```sh
-sudo bash deploy/lxc/install.sh
+sha256sum -c printnest-0.1.0-linux-amd64.tar.gz.sha256
+sudo BUNDLE_FILE=$PWD/printnest-0.1.0-linux-amd64.tar.gz bash deploy/lxc/install.sh
+# or: sudo RELEASE_TAG=v0.1.0 bash deploy/lxc/install.sh
 sudoedit /var/lib/printnest/config.env   # set PRINTNEST_PASSWORD
 sudo systemctl restart printnest
 ```
@@ -19,10 +31,17 @@ sudo systemctl restart printnest
 Alpine LXC (Proxmox, OpenRC instead of systemd):
 
 ```sh
-sh deploy/lxc/install-alpine.sh          # INSTALL_HPLIP=0 for driverless-only, smaller
+sha256sum -c printnest-0.1.0-linux-amd64.tar.gz.sha256
+BUNDLE_FILE=$PWD/printnest-0.1.0-linux-amd64.tar.gz sh deploy/lxc/install-alpine.sh
+# or: RELEASE_TAG=v0.1.0 sh deploy/lxc/install-alpine.sh
+# INSTALL_HPLIP=0 for driverless-only, smaller
 vi /var/lib/printnest/config.env         # set PRINTNEST_PASSWORD
 rc-service printnest restart
 ```
+
+`BUNDLE_SHA256` pins a checksum when using `BUNDLE_URL`; release downloads
+verify automatically. No Go/Node toolchain is installed on the target;
+only runtime deps (CUPS, `heif-convert`, nginx).
 
 mDNS discovery (network scan) on Alpine needs `avahi`+`dbus` running;
 direct `ipp://` add works without them.
@@ -58,8 +77,18 @@ add with driverless `everywhere`), `/admin/settings` (retention).
 cd backend && go test ./... && go vet ./...
 cd ../frontend && npm ci && npm run build
 PRINTNEST_PASSWORD=devpass DATA_DIR=/tmp/pn-data FRONTEND_DIR=$PWD/frontend/dist \
-  go run . 
+  go run .
 ```
+
+Cut a release bundle (static binary + `frontend/dist`, one per arch):
+
+```sh
+bash deploy/build-bundle.sh            # uses git tag or package.json version
+bash deploy/build-bundle.sh --version 0.1.0 --arch amd64
+```
+
+Tagging `v*` triggers `.github/workflows/release.yml`, which builds and
+attaches the bundles to the GitHub release the installers consume.
 
 API: `POST /api/login`, `GET /api/printers`, `POST /api/printers/discover`,
 `POST /api/printers/add`, `GET /api/printers/{name}/caps`,
