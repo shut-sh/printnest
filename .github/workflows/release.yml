@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   bundle:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,3 +31,5 @@ jobs:
           files: |
             dist/printnest-*-linux-*.tar.gz
             dist/printnest-*-linux-*.tar.gz.sha256
+            dist/install.sh
+            dist/install-alpine.sh
