@@ -6,45 +6,52 @@ network printer (first target: HP DeskJet 2700, A4).
 
 Flow: Choose / Share file -> Preview -> Configure -> Print.
 
-## Quick start (native LXC, no Docker)
+## Install (native LXC, no Docker)
 
-Install from a prebuilt release bundle (recommended, no build tools on
-the LXC). One static binary runs on both Debian/glibc and Alpine/musl;
-the installer for each distro only copies the binary, the built
-`frontend/dist`, and the service/config files.
+Works in a Debian/Ubuntu or Alpine LXC on Proxmox, amd64 or arm64. Nothing is
+compiled on the container and no git clone is needed. Each release contains a
+static binary, the built web UI, the installers, and the config templates.
 
-Download `printnest-<version>-linux-<arch>.tar.gz` (+ `.sha256`) from the
-[GitHub release](https://github.com/shut-sh/printnest/releases), verify the
-checksum, then run the installer with `BUNDLE_FILE` (or `RELEASE_TAG`/
-`BUNDLE_URL` to fetch it automatically):
-
-Debian/Ubuntu LXC (Proxmox, systemd):
+Run as root inside the container. Both options below need curl first:
 
 ```sh
-sha256sum -c printnest-0.1.0-linux-amd64.tar.gz.sha256
-sudo BUNDLE_FILE=$PWD/printnest-0.1.0-linux-amd64.tar.gz bash deploy/lxc/install.sh
-# or: sudo RELEASE_TAG=v0.1.0 bash deploy/lxc/install.sh
-sudoedit /var/lib/printnest/config.env   # set PRINTNEST_PASSWORD
-sudo systemctl restart printnest
+apt-get install -y curl ca-certificates      # Alpine: apk add curl ca-certificates
 ```
 
-Alpine LXC (Proxmox, OpenRC instead of systemd):
+Option A, one command (downloads the release for this architecture and verifies it):
 
 ```sh
-sha256sum -c printnest-0.1.0-linux-amd64.tar.gz.sha256
-BUNDLE_FILE=$PWD/printnest-0.1.0-linux-amd64.tar.gz sh deploy/lxc/install-alpine.sh
-# or: RELEASE_TAG=v0.1.0 sh deploy/lxc/install-alpine.sh
-# INSTALL_HPLIP=0 for driverless-only, smaller
-vi /var/lib/printnest/config.env         # set PRINTNEST_PASSWORD
-rc-service printnest restart
+# Debian/Ubuntu
+curl -fsSL https://github.com/shut-sh/printnest/releases/download/v0.1.0/install.sh | RELEASE_TAG=v0.1.0 bash
+
+# Alpine
+curl -fsSL https://github.com/shut-sh/printnest/releases/download/v0.1.0/install-alpine.sh | RELEASE_TAG=v0.1.0 sh
 ```
 
-`BUNDLE_SHA256` pins a checksum when using `BUNDLE_URL`; release downloads
-verify automatically. No Go/Node toolchain is installed on the target;
-only runtime deps (CUPS, `heif-convert`, nginx).
+Option B, download and verify the tarball yourself, then install from it:
 
-mDNS discovery (network scan) on Alpine needs `avahi`+`dbus` running;
-direct `ipp://` add works without them.
+```sh
+VERSION=0.1.0
+ARCH=$(uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+BASE=https://github.com/shut-sh/printnest/releases/download/v$VERSION
+curl -fsSLO "$BASE/printnest-$VERSION-linux-$ARCH.tar.gz"
+curl -fsSLO "$BASE/printnest-$VERSION-linux-$ARCH.tar.gz.sha256"
+sha256sum -c "printnest-$VERSION-linux-$ARCH.tar.gz.sha256"
+tar xzf "printnest-$VERSION-linux-$ARCH.tar.gz"
+./printnest/deploy/lxc/install.sh            # Alpine: sh ./printnest/deploy/lxc/install-alpine.sh
+```
+
+Both options install the same things: `/usr/local/bin/printnest`, the web UI and
+templates under `/opt/printnest`, the config at `/var/lib/printnest/config.env`, and a
+`printnest` service (systemd, or OpenRC on Alpine). The service is enabled but
+stays stopped until you set the admin password:
+
+```sh
+vi /var/lib/printnest/config.env     # PRINTNEST_PASSWORD is read on first start only
+systemctl start printnest            # Alpine: rc-service printnest start
+```
+
+Logs: `journalctl -u printnest` on Debian/Ubuntu, `/var/log/printnest.log` on Alpine.
 
 Add the DeskJet (driverless first, hplip fallback):
 
@@ -54,9 +61,28 @@ lpadmin -p deskjet2700 -E -v ipp://<printer-ip>/ipp/print -m everywhere
 lpstat -p -d
 ```
 
-Point your existing nginx HTTPS vhost at `http://127.0.0.1:8080`
-(see `deploy/lxc/nginx-snippet.conf`). PWA install + Android Share Target
-require HTTPS, which your nginx provides; the app itself serves plain HTTP.
+Point your existing nginx HTTPS vhost at `http://127.0.0.1:8080`, using
+`/opt/printnest/deploy/lxc/nginx-snippet.conf` as the template. PWA install and the
+Android Share Target require HTTPS, which your nginx provides; the app itself serves plain HTTP.
+
+mDNS discovery (network scan) on Alpine needs `avahi` and `dbus` running; a direct
+`ipp://` add works without them.
+
+To upgrade, run the installer again with the new release. Config and uploads are kept,
+and a running service is restarted.
+
+Installer options (environment variables, all optional):
+
+| Variable | Effect |
+|---|---|
+| `RELEASE_TAG` | Release to download when running standalone (default: latest) |
+| `BUNDLE_FILE` | Install from a local tarball instead of downloading |
+| `BUNDLE_URL`, `BUNDLE_SHA256` | Download from any URL and verify against the given sha256 hex digest |
+| `INSTALL_HPLIP=0` | Skip hplip (driverless `everywhere` only, smaller) |
+| `APP_DIR`, `DATA_DIR`, `APP_USER` | Install locations and service user |
+
+When the installer runs from an extracted bundle (Option B), it does not download the
+bundle again. Package installation still fetches from the distro repositories.
 
 ## Using it
 
@@ -74,26 +100,27 @@ add with driverless `everywhere`), `/admin/settings` (retention).
 ## Dev
 
 ```sh
+cd frontend && npm ci && npm run build && cd ..
 cd backend && go test ./... && go vet ./...
-cd ../frontend && npm ci && npm run build
-PRINTNEST_PASSWORD=devpass DATA_DIR=/tmp/pn-data FRONTEND_DIR=$PWD/frontend/dist \
-  go run .
+PRINTNEST_PASSWORD=devpass DATA_DIR=/tmp/pn-data FRONTEND_DIR=$(pwd)/../frontend/dist go run .
 ```
-
-Cut a release bundle (static binary + `frontend/dist`, one per arch):
-
-```sh
-bash deploy/build-bundle.sh            # uses git tag or package.json version
-bash deploy/build-bundle.sh --version 0.1.0 --arch amd64
-```
-
-Tagging `v*` triggers `.github/workflows/release.yml`, which builds and
-attaches the bundles to the GitHub release the installers consume.
 
 API: `POST /api/login`, `GET /api/printers`, `POST /api/printers/discover`,
 `POST /api/printers/add`, `GET /api/printers/{name}/caps`,
 `POST /api/jobs` (multipart `file`), `POST /api/jobs/{id}/print`,
 `GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`, `GET/PUT /api/settings`.
+
+## Release (manual)
+
+The GitHub Actions release workflow is disabled, so releases are cut by hand.
+`deploy/build-bundle.sh` writes one static bundle per architecture plus the two
+installers into `dist/`:
+
+```sh
+git tag -a v0.1.0 -m "PrintNest v0.1.0" && git push origin v0.1.0
+bash deploy/build-bundle.sh --version 0.1.0
+gh release create v0.1.0 --title "PrintNest v0.1.0" --generate-notes dist/*
+```
 
 ## E2E prove-out (DeskJet 2700)
 

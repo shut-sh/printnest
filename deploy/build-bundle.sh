@@ -7,9 +7,11 @@
 # The Debian/Ubuntu (deploy/lxc/install.sh) and Alpine
 # (deploy/lxc/install-alpine.sh) installers copy from this bundle
 # instead of building on the target, so no Go/Node toolchain is needed
-# on the LXC.
+# on the LXC. The same two installers are also written to dist/ as
+# standalone release assets.
 #
-# Output: dist/printnest-<version>-linux-<arch>.tar.gz (+ .sha256)
+# Output: dist/printnest-<version>-linux-<arch>.tar.gz (+ .sha256),
+#         dist/install.sh, dist/install-alpine.sh
 # Layout inside the tarball (top-level dir "printnest/"):
 #   printnest                  backend binary (static)
 #   frontend/dist/             built Svelte SPA + PWA files
@@ -108,4 +110,7 @@ for ARCH in $ARCH_LIST; do
   echo "    wrote $TARBALL"
 done
 
-echo "==> Done. Publish dist/*.tar.gz + dist/*.sha256 to the GitHub release."
+install -m 0755 "$REPO_ROOT/deploy/lxc/install.sh" "$OUT_DIR/install.sh"
+install -m 0755 "$REPO_ROOT/deploy/lxc/install-alpine.sh" "$OUT_DIR/install-alpine.sh"
+
+echo "==> Done. Release assets in $OUT_DIR: printnest-*-linux-*.tar.gz (+ .sha256), install.sh, install-alpine.sh"

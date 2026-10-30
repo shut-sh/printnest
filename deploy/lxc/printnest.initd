@@ -1,4 +1,5 @@
 #!/sbin/openrc-run
+# shellcheck disable=SC2034
 # OpenRC init script for PrintNest on Alpine Linux.
 # Debian/systemd equivalent: deploy/lxc/printnest.service
 # Installed by deploy/lxc/install-alpine.sh to /etc/init.d/printnest.
