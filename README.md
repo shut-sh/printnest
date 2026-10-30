@@ -22,16 +22,16 @@ Option A, one command (downloads the release for this architecture and verifies 
 
 ```sh
 # Debian/Ubuntu
-curl -fsSL https://github.com/shut-sh/printnest/releases/download/v0.1.0/install.sh | RELEASE_TAG=v0.1.0 bash
+curl -fsSL https://github.com/shut-sh/printnest/releases/download/v0.1.1/install.sh | RELEASE_TAG=v0.1.1 bash
 
 # Alpine
-curl -fsSL https://github.com/shut-sh/printnest/releases/download/v0.1.0/install-alpine.sh | RELEASE_TAG=v0.1.0 sh
+curl -fsSL https://github.com/shut-sh/printnest/releases/download/v0.1.1/install-alpine.sh | RELEASE_TAG=v0.1.1 sh
 ```
 
 Option B, download and verify the tarball yourself, then install from it:
 
 ```sh
-VERSION=0.1.0
+VERSION=0.1.1
 ARCH=$(uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 BASE=https://github.com/shut-sh/printnest/releases/download/v$VERSION
 curl -fsSLO "$BASE/printnest-$VERSION-linux-$ARCH.tar.gz"
@@ -117,9 +117,9 @@ The GitHub Actions release workflow is disabled, so releases are cut by hand.
 installers into `dist/`:
 
 ```sh
-git tag -a v0.1.0 -m "PrintNest v0.1.0" && git push origin v0.1.0
-bash deploy/build-bundle.sh --version 0.1.0
-gh release create v0.1.0 --title "PrintNest v0.1.0" --generate-notes dist/*
+git tag -a v0.1.1 -m "PrintNest v0.1.1" && git push origin v0.1.1
+bash deploy/build-bundle.sh --version 0.1.1
+gh release create v0.1.1 --title "PrintNest v0.1.1" --generate-notes dist/*
 ```
 
 ## E2E prove-out (DeskJet 2700)
