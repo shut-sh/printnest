@@ -111,7 +111,7 @@ main() {
   echo "==> Installing runtime packages"
   apk update
   apk add openrc cups cups-client cups-openrc dbus dbus-openrc avahi avahi-openrc \
-    libheif-tools imagemagick nginx curl ca-certificates
+    libheif-tools imagemagick curl ca-certificates
   if [ "$INSTALL_HPLIP" = "1" ]; then
     apk add hplip
   else
