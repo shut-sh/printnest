@@ -124,6 +124,11 @@ main() {
   fi
   addgroup -S lpadmin 2>/dev/null || true
   addgroup "$APP_USER" lpadmin 2>/dev/null || true
+  for admin in root "${SUDO_USER:-}"; do
+    if [ -n "$admin" ]; then
+      addgroup "$admin" lpadmin 2>/dev/null || true
+    fi
+  done
 
   mkdir -p "$APP_DIR" "$DATA_DIR/uploads"
   if [ "$BUNDLE_ROOT" != "$APP_DIR" ]; then

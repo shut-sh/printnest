@@ -111,6 +111,11 @@ main() {
 
   id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$APP_USER"
   usermod -aG lpadmin "$APP_USER" || true
+  for admin in root "${SUDO_USER:-}"; do
+    if [ -n "$admin" ]; then
+      usermod -aG lpadmin "$admin"
+    fi
+  done
 
   mkdir -p "$APP_DIR" "$DATA_DIR/uploads"
   if [ "$BUNDLE_ROOT" != "$APP_DIR" ]; then
