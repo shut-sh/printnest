@@ -16,9 +16,9 @@ import (
 )
 
 type Server struct {
-	DB      *db.DB
-	Jobs    *jobs.Store
-	Backend print.PrinterBackend
+	DB       *db.DB
+	Jobs     *jobs.Store
+	Backend  print.PrinterBackend
 	MaxBytes int64
 	DefRet   int
 }
@@ -121,6 +121,10 @@ func (s *Server) handleAddPrinter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Backend.AddPrinter(body.Name, body.URI, body.Model); err != nil {
+		if print.IsUnresponsive(err) {
+			writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error(), "hint": "power-cycle"})
+			return
+		}
 		writeErr(w, http.StatusBadGateway, printerErr(err))
 		return
 	}
@@ -270,6 +274,10 @@ func (s *Server) routeJobs(w http.ResponseWriter, r *http.Request) {
 		}
 		j, err := s.Jobs.SubmitPrint(id, req)
 		if err != nil {
+			if print.IsUnresponsive(err) {
+				writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error(), "hint": "power-cycle"})
+				return
+			}
 			if ve, ok := print.IsValidationError(err); ok {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": ve.Error(), "supported": ve.Supported, "field": ve.Field})
 				return

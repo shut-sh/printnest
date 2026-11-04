@@ -13,9 +13,9 @@ import (
 )
 
 type Store struct {
-	DB      *db.DB
-	Backend print.PrinterBackend
-	DataDir string
+	DB       *db.DB
+	Backend  print.PrinterBackend
+	DataDir  string
 	MaxBytes int64
 }
 
@@ -57,17 +57,17 @@ func (s *Store) Create(origName, mime string, size int64, data []byte) (db.Job, 
 		return db.Job{}, err
 	}
 	j := db.Job{
-		ID:        id,
-		OrigName:  origName,
-		Mime:      mime,
-		SizeBytes: int64(len(data)),
-		Copies:    1,
-		ColorMode: "color",
+		ID:          id,
+		OrigName:    origName,
+		Mime:        mime,
+		SizeBytes:   int64(len(data)),
+		Copies:      1,
+		ColorMode:   "color",
 		Orientation: "portrait",
-		Media:     print.MediaA4,
-		Scaling:   "fit",
-		Status:    "uploaded",
-		CreatedAt: time.Now().Unix(),
+		Media:       print.MediaA4,
+		Scaling:     "fit",
+		Status:      "uploaded",
+		CreatedAt:   time.Now().Unix(),
 	}
 	if err := s.DB.InsertJob(j); err != nil {
 		os.RemoveAll(dir)
@@ -165,7 +165,12 @@ func (s *Store) SubmitPrint(id string, req PrintRequest) (db.Job, error) {
 	return j, nil
 }
 
+const stalledHintAfter = 5 * time.Minute
+
 func describeBackendError(printer string, err error) string {
+	if print.IsUnresponsive(err) {
+		return err.Error()
+	}
 	if ve, ok := print.IsValidationError(err); ok {
 		return ve.Error()
 	}
@@ -197,9 +202,17 @@ func (s *Store) Refresh(id string) (db.Job, error) {
 	default:
 		j.Status = "processing"
 	}
-	if len(info.StateReasons) > 0 {
-		j.Error = joinReasons(info.StateReasons)
+	reasons := joinReasons(info.StateReasons)
+	if (j.Status == "pending" || j.Status == "processing") && j.PrintedAt > 0 &&
+		time.Since(time.Unix(j.PrintedAt, 0)) > stalledHintAfter {
+		hint := "no progress for 5m · check the printer; if it is on but unresponsive, power cycle it"
+		if reasons == "" {
+			reasons = hint
+		} else {
+			reasons = reasons + " · " + hint
+		}
 	}
+	j.Error = reasons
 	s.DB.UpdateJob(j)
 	return j, nil
 }

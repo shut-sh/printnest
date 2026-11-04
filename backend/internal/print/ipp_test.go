@@ -3,10 +3,11 @@ package print
 import (
 	"bytes"
 	"testing"
+	"time"
 )
 
 func TestEncodeJobPayloadPageRanges(t *testing.T) {
-	b := NewIPPBackend("localhost", 631, "printnest")
+	b := NewIPPBackend("localhost", 631, "printnest", 25*time.Second)
 	payload, err := b.encodeJobPayload("deskjet2700", "t.pdf", PrintOptions{
 		Copies: 2, PageRanges: "1-2,4", ColorMode: "color",
 		Orientation: "portrait", Media: MediaA4, Scaling: "fit",
@@ -33,7 +34,7 @@ func TestEncodeJobPayloadPageRanges(t *testing.T) {
 }
 
 func TestEncodeJobPayloadNoRanges(t *testing.T) {
-	b := NewIPPBackend("localhost", 631, "printnest")
+	b := NewIPPBackend("localhost", 631, "printnest", 25*time.Second)
 	payload, err := b.encodeJobPayload("deskjet2700", "t.pdf", PrintOptions{
 		Copies: 1, ColorMode: "monochrome", Orientation: "landscape", Media: MediaA4, Scaling: "none",
 	})

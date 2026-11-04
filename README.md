@@ -58,7 +58,8 @@ user who ran `sudo`, if any) to the `lpadmin` group. CUPS requires that membersh
 admin commands, so without it `lpadmin` returns `Forbidden`:
 
 ```sh
-lpadmin -p deskjet2700 -E -v ipp://<printer-ip>/ipp/print -m everywhere
+lpadmin -p deskjet2700 -E -v ipp://<printer-ip>/ipp/print -m everywhere \
+  -o printer-error-policy=retry-job
 # if that fails: hp-setup -i  (hplip), then retry with the hplip PPD
 lpstat -p -d
 ```
@@ -82,6 +83,19 @@ Installer options (environment variables, all optional):
 | `BUNDLE_URL`, `BUNDLE_SHA256` | Download from any URL and verify against the given sha256 hex digest |
 | `INSTALL_HPLIP=0` | Skip hplip (driverless `everywhere` only, smaller) |
 | `APP_DIR`, `DATA_DIR`, `APP_USER` | Install locations and service user |
+| `IPP_TIMEOUT_SECONDS` | Seconds before a printer is reported unresponsive (default 25) |
+
+The installer also writes a bounded retry policy into `/etc/cups/cupsd.conf`
+(`JobRetryLimit 3`, `JobRetryInterval 30`, between `# BEGIN printnest` markers) and
+keeps the previous file as `cupsd.conf.printnest.bak`. Queues must use the
+`retry-job` error policy for it to apply; the app creates queues that way, and the
+manual `lpadmin` command above sets it explicitly.
+
+If a printer is powered on but stops answering IPP, the app now fails the request
+after `IPP_TIMEOUT_SECONDS` (default 25) with "printer did not respond · power cycle
+the printer and retry" instead of hanging, and a job stuck in `pending`/`processing`
+for over 5 minutes gets the same hint. Retries do not help in that state; only a
+printer power cycle does.
 
 When the installer runs from an extracted bundle (Option B), it does not download the
 bundle again. Package installation still fetches from the distro repositories.

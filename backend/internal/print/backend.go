@@ -1,14 +1,14 @@
 package print
 
 type PrinterInfo struct {
-	Name       string   `json:"name"`
-	MakeModel  string   `json:"make_model"`
-	State      string   `json:"state"`
-	Reasons    []string `json:"state_reasons"`
-	DeviceURI  string   `json:"device_uri"`
-	URI        string   `json:"uri"`
-	Accepting  bool     `json:"accepting"`
-	Shared     bool     `json:"shared"`
+	Name      string   `json:"name"`
+	MakeModel string   `json:"make_model"`
+	State     string   `json:"state"`
+	Reasons   []string `json:"state_reasons"`
+	DeviceURI string   `json:"device_uri"`
+	URI       string   `json:"uri"`
+	Accepting bool     `json:"accepting"`
+	Shared    bool     `json:"shared"`
 }
 
 type DeviceInfo struct {
@@ -19,16 +19,16 @@ type DeviceInfo struct {
 }
 
 type Caps struct {
-	MediaSupported          []string `json:"media_supported"`
-	MediaDefault            string   `json:"media_default"`
-	ColorModesSupported     []string `json:"color_mode_supported"`
-	ScalingSupported        []string `json:"scaling_supported"`
-	OrientationsSupported   []int    `json:"orientation_supported"`
-	CopiesSupported         bool     `json:"copies_supported"`
-	PageRangesSupported     bool     `json:"page_ranges_supported"`
-	DocumentFormats         []string `json:"document_format_supported"`
-	PrinterState            string   `json:"printer_state"`
-	StateReasons            []string `json:"state_reasons"`
+	MediaSupported        []string `json:"media_supported"`
+	MediaDefault          string   `json:"media_default"`
+	ColorModesSupported   []string `json:"color_mode_supported"`
+	ScalingSupported      []string `json:"scaling_supported"`
+	OrientationsSupported []int    `json:"orientation_supported"`
+	CopiesSupported       bool     `json:"copies_supported"`
+	PageRangesSupported   bool     `json:"page_ranges_supported"`
+	DocumentFormats       []string `json:"document_format_supported"`
+	PrinterState          string   `json:"printer_state"`
+	StateReasons          []string `json:"state_reasons"`
 }
 
 type PrintOptions struct {

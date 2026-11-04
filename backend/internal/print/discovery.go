@@ -11,8 +11,8 @@ import (
 )
 
 type discoveryCache struct {
-	mu      sync.Mutex
-	at      time.Time
+	mu       sync.Mutex
+	at       time.Time
 	printers []PrinterInfo
 }
 
@@ -22,9 +22,9 @@ type FailoverBackend struct {
 	cache    discoveryCache
 }
 
-func NewFailoverBackend(host string, port int, user string) *FailoverBackend {
+func NewFailoverBackend(host string, port int, user string, timeout time.Duration) *FailoverBackend {
 	return &FailoverBackend{
-		primary:  NewIPPBackend(host, port, user),
+		primary:  NewIPPBackend(host, port, user, timeout),
 		fallback: NewExecBackend(user),
 	}
 }
@@ -46,6 +46,9 @@ func (b *FailoverBackend) ListPrinters() ([]PrinterInfo, error) {
 		b.cache.mu.Unlock()
 		return printers, nil
 	}
+	if IsUnresponsive(err) {
+		return nil, err
+	}
 	if IsTransportError(err) || isIPPError(err) {
 		log.Printf("printnest: ListPrinters IPP failed (%v), backend=exec-fallback", err)
 		return b.fallback.ListPrinters()
@@ -58,6 +61,9 @@ func (b *FailoverBackend) ScanDevices() ([]DeviceInfo, error) {
 	if err == nil {
 		return devs, nil
 	}
+	if IsUnresponsive(err) {
+		return nil, err
+	}
 	if IsTransportError(err) || isIPPError(err) {
 		log.Printf("printnest: ScanDevices IPP failed (%v), backend=exec-fallback", err)
 		return b.fallback.ScanDevices()
@@ -69,6 +75,9 @@ func (b *FailoverBackend) GetCaps(printer string) (Caps, error) {
 	c, err := b.primary.GetCaps(printer)
 	if err == nil {
 		return c, nil
+	}
+	if IsUnresponsive(err) {
+		return Caps{}, err
 	}
 	if IsTransportError(err) || isIPPError(err) {
 		log.Printf("printnest: GetCaps IPP failed (%v), backend=exec-fallback", err)
@@ -83,6 +92,8 @@ func (b *FailoverBackend) AddPrinter(name, uri, model string) error {
 		b.cache.at = time.Time{}
 		b.cache.mu.Unlock()
 		return nil
+	} else if IsUnresponsive(err) {
+		return err
 	} else if !(IsTransportError(err) || isIPPError(err)) {
 		return err
 	} else {
@@ -105,6 +116,9 @@ func (b *FailoverBackend) Submit(printer, filePath string, opts PrintOptions) (i
 	if _, ok := IsValidationError(err); ok {
 		return 0, err
 	}
+	if IsUnresponsive(err) {
+		return 0, err
+	}
 	if msg := err.Error(); strings.Contains(msg, "unsupported ") {
 		return 0, err
 	}
@@ -120,6 +134,9 @@ func (b *FailoverBackend) GetJob(cupsJobID int) (JobInfo, error) {
 	if err == nil {
 		return info, nil
 	}
+	if IsUnresponsive(err) {
+		return JobInfo{}, err
+	}
 	if IsTransportError(err) || isIPPError(err) {
 		return b.fallback.GetJob(cupsJobID)
 	}
@@ -129,6 +146,8 @@ func (b *FailoverBackend) GetJob(cupsJobID int) (JobInfo, error) {
 func (b *FailoverBackend) CancelJob(cupsJobID int) error {
 	if err := b.primary.CancelJob(cupsJobID); err == nil {
 		return nil
+	} else if IsUnresponsive(err) {
+		return err
 	} else if !(IsTransportError(err) || isIPPError(err)) {
 		return err
 	} else {

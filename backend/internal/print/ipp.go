@@ -11,28 +11,40 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	ipp "github.com/phin1x/go-ipp"
 )
 
 type IPPBackend struct {
-	cups *ipp.CUPSClient
-	host string
-	port int
-	user string
+	cups       *ipp.CUPSClient
+	client     *ipp.IPPClient
+	httpClient *http.Client
+	host       string
+	port       int
+	user       string
+	timeout    time.Duration
 }
 
-func NewIPPBackend(host string, port int, user string) *IPPBackend {
+func NewIPPBackend(host string, port int, user string, timeout time.Duration) *IPPBackend {
+	if timeout <= 0 {
+		timeout = 25 * time.Second
+	}
+	httpClient := &http.Client{Timeout: timeout}
+	adapter := ipp.NewHttpAdapter(host, port, user, "", false, ipp.WithHttpClient(httpClient))
 	return &IPPBackend{
-		cups: ipp.NewCUPSClient(host, port, user, "", false),
-		host: host,
-		port: port,
-		user: user,
+		cups:       ipp.NewCUPSClientWithAdapter(user, adapter),
+		client:     ipp.NewIPPClientWithAdapter(user, adapter),
+		httpClient: httpClient,
+		host:       host,
+		port:       port,
+		user:       user,
+		timeout:    timeout,
 	}
 }
 
 func (b *IPPBackend) ippClient() *ipp.IPPClient {
-	return ipp.NewIPPClient(b.host, b.port, b.user, "", false)
+	return b.client
 }
 
 func attrStr(a ipp.Attributes, key string) string {
@@ -134,7 +146,7 @@ var capsAttrs = []string{
 func (b *IPPBackend) ListPrinters() ([]PrinterInfo, error) {
 	m, err := b.cups.GetPrinters(nil)
 	if err != nil {
-		return nil, err
+		return nil, asUnresponsive("", b.timeout, err)
 	}
 	out := make([]PrinterInfo, 0, len(m))
 	for name, a := range m {
@@ -166,7 +178,7 @@ func (b *IPPBackend) ListPrinters() ([]PrinterInfo, error) {
 func (b *IPPBackend) ScanDevices() ([]DeviceInfo, error) {
 	m, err := b.cups.GetDevices()
 	if err != nil {
-		return nil, err
+		return nil, asUnresponsive("", b.timeout, err)
 	}
 	out := make([]DeviceInfo, 0, len(m))
 	for uri, a := range m {
@@ -183,7 +195,7 @@ func (b *IPPBackend) ScanDevices() ([]DeviceInfo, error) {
 func (b *IPPBackend) GetCaps(printer string) (Caps, error) {
 	a, err := b.ippClient().GetPrinterAttributes(printer, capsAttrs)
 	if err != nil {
-		return Caps{}, err
+		return Caps{}, asUnresponsive(printer, b.timeout, err)
 	}
 	c := Caps{
 		MediaSupported:        attrStrs(a, "media-supported"),
@@ -226,9 +238,12 @@ func (b *IPPBackend) AddPrinter(name, uri, model string) error {
 		return fmt.Errorf("name and uri required")
 	}
 	if err := b.cups.CreatePrinter(name, uri, "everywhere", true, ipp.ErrorPolicyRetryJob, model, "PrintNest"); err != nil {
-		return err
+		return asUnresponsive(name, b.timeout, err)
 	}
-	return b.cups.AcceptJobs(name)
+	if err := b.cups.AcceptJobs(name); err != nil {
+		return asUnresponsive(name, b.timeout, err)
+	}
+	return nil
 }
 
 func (b *IPPBackend) jobAttrs(opts PrintOptions) map[string]any {
@@ -326,9 +341,9 @@ func (b *IPPBackend) submitRaw(printer string, opts PrintOptions, docName string
 	}
 	httpReq.Header.Set("Content-Type", ipp.ContentTypeIPP)
 	httpReq.Header.Set("Content-Length", strconv.Itoa(len(payload)+size))
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := b.httpClient.Do(httpReq)
 	if err != nil {
-		return 0, err
+		return 0, asUnresponsive(printer, b.timeout, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -378,6 +393,9 @@ func firstNonEmpty(s, def string) string {
 func (b *IPPBackend) Submit(printer, filePath string, opts PrintOptions) (int, error) {
 	caps, err := b.GetCaps(printer)
 	if err != nil {
+		if IsUnresponsive(err) {
+			return 0, err
+		}
 		log.Printf("printnest: GetCaps failed for %q: %v", printer, err)
 	} else if err := ValidateOptions(caps, opts); err != nil {
 		return 0, err
@@ -407,7 +425,7 @@ func (b *IPPBackend) GetJob(cupsJobID int) (JobInfo, error) {
 		"job-id", "job-state", "job-state-reasons", "job-printer-uri", "job-name",
 	})
 	if err != nil {
-		return JobInfo{}, err
+		return JobInfo{}, asUnresponsive("", b.timeout, err)
 	}
 	state := JobState(attrInt(a, "job-state"))
 	return JobInfo{
@@ -420,5 +438,5 @@ func (b *IPPBackend) GetJob(cupsJobID int) (JobInfo, error) {
 }
 
 func (b *IPPBackend) CancelJob(cupsJobID int) error {
-	return b.ippClient().CancelJob(cupsJobID, false)
+	return asUnresponsive("", b.timeout, b.ippClient().CancelJob(cupsJobID, false))
 }

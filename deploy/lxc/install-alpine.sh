@@ -22,6 +22,40 @@ die() {
   exit 1
 }
 
+configure_cups_retries() {
+  conf=/etc/cups/cupsd.conf
+  if [ ! -f "$conf" ]; then
+    echo "warning: $conf not found; skipping CUPS retry configuration" >&2
+    return 0
+  fi
+  tmp="$(mktemp)"
+  awk '
+    /^# BEGIN printnest$/ { skip = 1; next }
+    /^# END printnest$/   { skip = 0; next }
+    skip != 1             { print }
+  ' "$conf" > "$tmp"
+  cat >> "$tmp" <<'CUPSBLOCK'
+
+# BEGIN printnest
+# Bound retries when a printer stops answering IPP (PrintNest)
+JobRetryLimit 3
+JobRetryInterval 30
+# END printnest
+CUPSBLOCK
+  chmod 0644 "$tmp"
+  chown root:root "$tmp" 2>/dev/null || true
+  cp -p "$conf" "${conf}.printnest.bak" 2>/dev/null || true
+  mv "$tmp" "$conf"
+  if cupsd -t >/dev/null 2>&1; then
+    echo "    CUPS retry config applied: JobRetryLimit 3, JobRetryInterval 30"
+  else
+    echo "warning: cupsd rejected the new config, restoring backup" >&2
+    if [ -f "${conf}.printnest.bak" ]; then
+      mv "${conf}.printnest.bak" "$conf"
+    fi
+  fi
+}
+
 detect_arch() {
   case "$(uname -m)" in
     x86_64|amd64) echo amd64 ;;
@@ -118,6 +152,8 @@ main() {
     echo "    Skipping hplip (driverless 'everywhere' only)"
   fi
 
+  configure_cups_retries
+
   if ! id "$APP_USER" >/dev/null 2>&1; then
     addgroup -S "$APP_USER"
     adduser -S -G "$APP_USER" -h "$DATA_DIR" -s /sbin/nologin "$APP_USER"
@@ -155,6 +191,7 @@ main() {
   rc-service dbus start 2>/dev/null || true
   rc-service avahi-daemon start 2>/dev/null || true
   rc-service cupsd start 2>/dev/null || true
+  rc-service cupsd restart 2>/dev/null || true
   if rc-service printnest status >/dev/null 2>&1; then
     rc-service printnest restart
   fi

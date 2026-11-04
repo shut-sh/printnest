@@ -45,7 +45,10 @@ func main() {
 		_ = store.SetSetting("file_retention_minutes", fmt.Sprint(cfg.RetentionMinutes))
 	}
 
-	backend := print.NewFailoverBackend(cfg.CUPSHost, cfg.CUPSPort, cfg.CUPSUser)
+	backend := print.NewFailoverBackend(
+		cfg.CUPSHost, cfg.CUPSPort, cfg.CUPSUser,
+		time.Duration(cfg.IPPTimeoutSecs)*time.Second,
+	)
 	jobStore := jobs.NewStore(store, backend, cfg.DataDir, cfg.MaxUploadBytes)
 
 	srv := &api.Server{DB: store, Jobs: jobStore, Backend: backend, MaxBytes: cfg.MaxUploadBytes, DefRet: cfg.RetentionMinutes}

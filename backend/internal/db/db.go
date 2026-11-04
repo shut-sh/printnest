@@ -18,22 +18,22 @@ type DB struct {
 }
 
 type Job struct {
-	ID           string
-	Printer      string
-	OrigName     string
-	Mime         string
-	SizeBytes    int64
-	Copies       int
-	PageRanges   string
-	ColorMode    string
-	Orientation  string
-	Media        string
-	Scaling      string
-	Status       string
-	CUPSJobID    int
-	Error        string
-	CreatedAt    int64
-	PrintedAt    int64
+	ID            string
+	Printer       string
+	OrigName      string
+	Mime          string
+	SizeBytes     int64
+	Copies        int
+	PageRanges    string
+	ColorMode     string
+	Orientation   string
+	Media         string
+	Scaling       string
+	Status        string
+	CUPSJobID     int
+	Error         string
+	CreatedAt     int64
+	PrintedAt     int64
 	FileDeletedAt int64
 }
 
