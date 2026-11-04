@@ -1,6 +1,7 @@
 package print
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -29,6 +30,20 @@ func NewFailoverBackend(host string, port int, user string, timeout time.Duratio
 	}
 }
 
+// fallbackAllowed reports whether an IPP failure is a CUPS transport problem
+// that the exec tools can work around. An unresponsive printer is not: the
+// printer is wedged and retrying through CUPS will stall the same way.
+func fallbackAllowed(err error) bool {
+	return !IsUnresponsive(err) && (IsTransportError(err) || isIPPError(err))
+}
+
+func (b *FailoverBackend) invalidateCache() {
+	b.cache.mu.Lock()
+	b.cache.at = time.Time{}
+	b.cache.printers = nil
+	b.cache.mu.Unlock()
+}
+
 func (b *FailoverBackend) ListPrinters() ([]PrinterInfo, error) {
 	b.cache.mu.Lock()
 	if time.Since(b.cache.at) < 30*time.Second && b.cache.printers != nil {
@@ -46,10 +61,7 @@ func (b *FailoverBackend) ListPrinters() ([]PrinterInfo, error) {
 		b.cache.mu.Unlock()
 		return printers, nil
 	}
-	if IsUnresponsive(err) {
-		return nil, err
-	}
-	if IsTransportError(err) || isIPPError(err) {
+	if fallbackAllowed(err) {
 		log.Printf("printnest: ListPrinters IPP failed (%v), backend=exec-fallback", err)
 		return b.fallback.ListPrinters()
 	}
@@ -61,10 +73,7 @@ func (b *FailoverBackend) ScanDevices() ([]DeviceInfo, error) {
 	if err == nil {
 		return devs, nil
 	}
-	if IsUnresponsive(err) {
-		return nil, err
-	}
-	if IsTransportError(err) || isIPPError(err) {
+	if fallbackAllowed(err) {
 		log.Printf("printnest: ScanDevices IPP failed (%v), backend=exec-fallback", err)
 		return b.fallback.ScanDevices()
 	}
@@ -76,10 +85,7 @@ func (b *FailoverBackend) GetCaps(printer string) (Caps, error) {
 	if err == nil {
 		return c, nil
 	}
-	if IsUnresponsive(err) {
-		return Caps{}, err
-	}
-	if IsTransportError(err) || isIPPError(err) {
+	if fallbackAllowed(err) {
 		log.Printf("printnest: GetCaps IPP failed (%v), backend=exec-fallback", err)
 		return b.fallback.GetCaps(printer)
 	}
@@ -87,24 +93,19 @@ func (b *FailoverBackend) GetCaps(printer string) (Caps, error) {
 }
 
 func (b *FailoverBackend) AddPrinter(name, uri, model string) error {
-	if err := b.primary.AddPrinter(name, uri, model); err == nil {
-		b.cache.mu.Lock()
-		b.cache.at = time.Time{}
-		b.cache.mu.Unlock()
+	err := b.primary.AddPrinter(name, uri, model)
+	if err == nil {
+		b.invalidateCache()
 		return nil
-	} else if IsUnresponsive(err) {
-		return err
-	} else if !(IsTransportError(err) || isIPPError(err)) {
-		return err
-	} else {
-		log.Printf("printnest: AddPrinter IPP failed (%v), backend=exec-fallback", err)
 	}
+	if !fallbackAllowed(err) {
+		return err
+	}
+	log.Printf("printnest: AddPrinter IPP failed (%v), backend=exec-fallback", err)
 	if err := b.fallback.AddPrinter(name, uri, model); err != nil {
 		return err
 	}
-	b.cache.mu.Lock()
-	b.cache.at = time.Time{}
-	b.cache.mu.Unlock()
+	b.invalidateCache()
 	return nil
 }
 
@@ -119,10 +120,10 @@ func (b *FailoverBackend) Submit(printer, filePath string, opts PrintOptions) (i
 	if IsUnresponsive(err) {
 		return 0, err
 	}
-	if msg := err.Error(); strings.Contains(msg, "unsupported ") {
+	if strings.Contains(err.Error(), "unsupported ") {
 		return 0, err
 	}
-	if !IsTransportError(err) && !isIPPError(err) {
+	if !fallbackAllowed(err) {
 		return 0, err
 	}
 	log.Printf("printnest: Submit IPP failed (%v), backend=exec-fallback", err)
@@ -134,25 +135,21 @@ func (b *FailoverBackend) GetJob(cupsJobID int) (JobInfo, error) {
 	if err == nil {
 		return info, nil
 	}
-	if IsUnresponsive(err) {
-		return JobInfo{}, err
-	}
-	if IsTransportError(err) || isIPPError(err) {
+	if fallbackAllowed(err) {
 		return b.fallback.GetJob(cupsJobID)
 	}
 	return JobInfo{}, err
 }
 
 func (b *FailoverBackend) CancelJob(cupsJobID int) error {
-	if err := b.primary.CancelJob(cupsJobID); err == nil {
+	err := b.primary.CancelJob(cupsJobID)
+	if err == nil {
 		return nil
-	} else if IsUnresponsive(err) {
-		return err
-	} else if !(IsTransportError(err) || isIPPError(err)) {
-		return err
-	} else {
-		log.Printf("printnest: CancelJob IPP failed (%v), backend=exec-fallback", err)
 	}
+	if !fallbackAllowed(err) {
+		return err
+	}
+	log.Printf("printnest: CancelJob IPP failed (%v), backend=exec-fallback", err)
 	return b.fallback.CancelJob(cupsJobID)
 }
 
@@ -161,15 +158,11 @@ func isIPPError(err error) bool {
 		return false
 	}
 	var ippErr ipp.IPPError
-	if e, ok := err.(ipp.IPPError); ok {
-		ippErr = e
-		_ = ippErr
+	if errors.As(err, &ippErr) {
 		return false
 	}
 	var httpErr ipp.HTTPError
-	if e, ok := err.(ipp.HTTPError); ok {
-		_ = e
-		_ = httpErr
+	if errors.As(err, &httpErr) {
 		return true
 	}
 	s := fmt.Sprint(err)

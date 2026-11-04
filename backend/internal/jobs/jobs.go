@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -165,7 +166,10 @@ func (s *Store) SubmitPrint(id string, req PrintRequest) (db.Job, error) {
 	return j, nil
 }
 
-const stalledHintAfter = 5 * time.Minute
+const (
+	stalledProcessingAfter = 5 * time.Minute
+	stalledPendingAfter    = 15 * time.Minute
+)
 
 func describeBackendError(printer string, err error) string {
 	if print.IsUnresponsive(err) {
@@ -190,8 +194,13 @@ func (s *Store) Refresh(id string) (db.Job, error) {
 	}
 	info, err := s.Backend.GetJob(j.CUPSJobID)
 	if err != nil {
+		if print.IsUnresponsive(err) {
+			j.Error = err.Error()
+			s.DB.UpdateJob(j)
+		}
 		return j, nil
 	}
+	previous := j.Status
 	switch info.State {
 	case print.JobCompleted:
 		j.Status = "done"
@@ -202,14 +211,27 @@ func (s *Store) Refresh(id string) (db.Job, error) {
 	default:
 		j.Status = "processing"
 	}
+	if j.Status != previous {
+		j.PrintedAt = time.Now().Unix()
+	}
+
 	reasons := joinReasons(info.StateReasons)
-	if (j.Status == "pending" || j.Status == "processing") && j.PrintedAt > 0 &&
-		time.Since(time.Unix(j.PrintedAt, 0)) > stalledHintAfter {
-		hint := "no progress for 5m · check the printer; if it is on but unresponsive, power cycle it"
+	if j.Status == "done" || j.Status == "canceled" {
+		j.Error = reasons
+		s.DB.UpdateJob(j)
+		return j, nil
+	}
+	if elapsed, stalled := stalledFor(j); stalled {
+		hint := fmt.Sprintf("no progress for %s", elapsed.Round(time.Minute))
+		if warning := s.printerWarning(j.Printer); warning != "" {
+			hint += " · " + warning
+		} else {
+			hint += " · check the printer; if it is on but unresponsive, power cycle it"
+		}
 		if reasons == "" {
 			reasons = hint
 		} else {
-			reasons = reasons + " · " + hint
+			reasons += " · " + hint
 		}
 	}
 	j.Error = reasons
@@ -217,10 +239,60 @@ func (s *Store) Refresh(id string) (db.Job, error) {
 	return j, nil
 }
 
+func stalledFor(j db.Job) (time.Duration, bool) {
+	if j.PrintedAt == 0 {
+		return 0, false
+	}
+	elapsed := time.Since(time.Unix(j.PrintedAt, 0))
+	switch j.Status {
+	case "processing":
+		return elapsed, elapsed > stalledProcessingAfter
+	case "pending":
+		return elapsed, elapsed > stalledPendingAfter
+	default:
+		return elapsed, false
+	}
+}
+
+func (s *Store) printerWarning(printer string) string {
+	if printer == "" {
+		return ""
+	}
+	list, err := s.Backend.ListPrinters()
+	if err != nil {
+		return ""
+	}
+	for _, p := range list {
+		if p.Name != printer {
+			continue
+		}
+		if p.State == "stopped" {
+			return "printer is stopped"
+		}
+		for _, reason := range p.Reasons {
+			r := strings.ToLower(reason)
+			if strings.Contains(r, "connecting-to-device") ||
+				strings.Contains(r, "offline") ||
+				strings.Contains(r, "not-responding") {
+				return "printer is not reachable"
+			}
+		}
+	}
+	return ""
+}
+
 func joinReasons(r []string) string {
+	benign := map[string]bool{
+		"none":                       true,
+		"job-incoming":               true,
+		"job-queued":                 true,
+		"job-printing":               true,
+		"job-processing":             true,
+		"job-completed-successfully": true,
+	}
 	out := ""
 	for i, s := range r {
-		if s == "" || s == "none" {
+		if s == "" || benign[s] {
 			continue
 		}
 		if i > 0 && out != "" {

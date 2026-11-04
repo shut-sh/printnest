@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 type Config struct {
@@ -16,7 +17,7 @@ type Config struct {
 	CUPSHost         string
 	CUPSPort         int
 	CUPSUser         string
-	IPPTimeoutSecs   int
+	IPPTimeout       time.Duration
 	PasswordSeed     string
 	RetentionMinutes int
 	MaxUploadBytes   int64
@@ -50,7 +51,7 @@ func Load() Config {
 		CUPSHost:         getenv("CUPS_HOST", "localhost"),
 		CUPSPort:         atoiOr("CUPS_PORT", 631),
 		CUPSUser:         getenv("CUPS_USER", "printnest"),
-		IPPTimeoutSecs:   atoiOr("IPP_TIMEOUT_SECONDS", 25),
+		IPPTimeout:       time.Duration(atoiOr("IPP_TIMEOUT_SECONDS", 25)) * time.Second,
 		PasswordSeed:     os.Getenv("PRINTNEST_PASSWORD"),
 		RetentionMinutes: atoiOr("FILE_RETENTION_MINUTES", 30),
 		MaxUploadBytes:   int64(maxMB) << 20,

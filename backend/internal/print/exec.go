@@ -109,7 +109,7 @@ func (b *ExecBackend) GetCaps(printer string) (Caps, error) {
 }
 
 func (b *ExecBackend) AddPrinter(name, uri, model string) error {
-	args := []string{"-p", name, "-E", "-v", uri, "-m", "everywhere"}
+	args := []string{"-p", name, "-E", "-v", uri, "-m", "everywhere", "-o", "printer-error-policy=retry-job"}
 	if _, err := run(b.env(), "lpadmin", args...); err != nil {
 		return err
 	}

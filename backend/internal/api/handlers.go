@@ -74,7 +74,7 @@ func (s *Server) handlePrinters(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := s.Backend.ListPrinters()
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, printerErr(err))
+		writePrinterFailure(w, err)
 		return
 	}
 	if list == nil {
@@ -85,6 +85,14 @@ func (s *Server) handlePrinters(w http.ResponseWriter, r *http.Request) {
 
 func printerErr(err error) string { return "CUPS: " + err.Error() }
 
+func writePrinterFailure(w http.ResponseWriter, err error) {
+	if print.IsUnresponsive(err) {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error(), "hint": "power-cycle"})
+		return
+	}
+	writeErr(w, http.StatusBadGateway, printerErr(err))
+}
+
 func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -92,7 +100,7 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 	}
 	devs, err := s.Backend.ScanDevices()
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, printerErr(err))
+		writePrinterFailure(w, err)
 		return
 	}
 	if devs == nil {
@@ -121,11 +129,7 @@ func (s *Server) handleAddPrinter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Backend.AddPrinter(body.Name, body.URI, body.Model); err != nil {
-		if print.IsUnresponsive(err) {
-			writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error(), "hint": "power-cycle"})
-			return
-		}
-		writeErr(w, http.StatusBadGateway, printerErr(err))
+		writePrinterFailure(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -149,7 +153,7 @@ func (s *Server) routePrinters(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimSuffix(strings.TrimPrefix(rest, "/"), "/caps")
 		caps, err := s.Backend.GetCaps(name)
 		if err != nil {
-			writeErr(w, http.StatusBadGateway, printerErr(err))
+			writePrinterFailure(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, caps)
@@ -275,7 +279,7 @@ func (s *Server) routeJobs(w http.ResponseWriter, r *http.Request) {
 		j, err := s.Jobs.SubmitPrint(id, req)
 		if err != nil {
 			if print.IsUnresponsive(err) {
-				writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error(), "hint": "power-cycle"})
+				writePrinterFailure(w, err)
 				return
 			}
 			if ve, ok := print.IsValidationError(err); ok {

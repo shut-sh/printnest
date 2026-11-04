@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	ipp "github.com/phin1x/go-ipp"
 )
 
 // UnresponsiveError reports that the printer (via CUPS) accepted the request
@@ -20,12 +22,12 @@ type UnresponsiveError struct {
 }
 
 func (e *UnresponsiveError) Error() string {
-	subject := "printer"
+	subject := "CUPS"
 	if e.Printer != "" {
 		subject = fmt.Sprintf("printer %q", e.Printer)
 	}
 	return fmt.Sprintf(
-		"%s did not respond within %s (CUPS request timed out) · power cycle the printer and retry",
+		"%s did not respond within %s (CUPS request timed out) · check the printer; if it is on but unresponsive, power cycle it and retry",
 		subject, e.Timeout,
 	)
 }
@@ -63,7 +65,12 @@ func isTimeoutErr(err error) bool {
 }
 
 func asUnresponsive(printer string, timeout time.Duration, err error) error {
-	if err == nil || !isTimeoutErr(err) || IsUnresponsive(err) {
+	if err == nil || IsUnresponsive(err) {
+		return err
+	}
+	var httpErr ipp.HTTPError
+	gatewayTimeout := errors.As(err, &httpErr) && (httpErr.Code == 408 || httpErr.Code == 504)
+	if !gatewayTimeout && !isTimeoutErr(err) {
 		return err
 	}
 	return &UnresponsiveError{Printer: printer, Timeout: timeout, Err: err}

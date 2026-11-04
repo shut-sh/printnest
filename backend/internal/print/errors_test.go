@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	ipp "github.com/phin1x/go-ipp"
 )
 
 func TestIsTimeoutErr(t *testing.T) {
@@ -45,6 +47,26 @@ func TestUnresponsiveError(t *testing.T) {
 	}
 	msg := err.Error()
 	for _, want := range []string{"deskjet2700", "25s", "power cycle"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("message %q missing %q", msg, want)
+		}
+	}
+}
+
+func TestAsUnresponsiveHTTPStatus(t *testing.T) {
+	for _, code := range []int{408, 504} {
+		if err := asUnresponsive("p", time.Second, ipp.HTTPError{Code: code}); !IsUnresponsive(err) {
+			t.Fatalf("HTTP %d should map to unresponsive, got %v", code, err)
+		}
+	}
+	if err := asUnresponsive("p", time.Second, ipp.HTTPError{Code: 500}); IsUnresponsive(err) {
+		t.Fatalf("HTTP 500 must not map to unresponsive")
+	}
+}
+
+func TestUnresponsiveMessageWithoutPrinter(t *testing.T) {
+	msg := (&UnresponsiveError{Timeout: 25 * time.Second}).Error()
+	for _, want := range []string{"CUPS", "25s", "power cycle"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("message %q missing %q", msg, want)
 		}

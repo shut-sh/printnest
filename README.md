@@ -92,10 +92,12 @@ keeps the previous file as `cupsd.conf.printnest.bak`. Queues must use the
 manual `lpadmin` command above sets it explicitly.
 
 If a printer is powered on but stops answering IPP, the app now fails the request
-after `IPP_TIMEOUT_SECONDS` (default 25) with "printer did not respond · power cycle
-the printer and retry" instead of hanging, and a job stuck in `pending`/`processing`
-for over 5 minutes gets the same hint. Retries do not help in that state; only a
-printer power cycle does.
+after `IPP_TIMEOUT_SECONDS` (default 25) with HTTP 504 and "did not respond · check
+the printer; if it is on but unresponsive, power cycle it and retry" instead of
+hanging. A job that shows no progress for 5 minutes while processing (15 minutes
+while queued) gets the same hint, including any CUPS printer-state reason such as
+`connecting-to-device`. Retries do not help in that state; only a printer power
+cycle does.
 
 When the installer runs from an extracted bundle (Option B), it does not download the
 bundle again. Package installation still fetches from the distro repositories.

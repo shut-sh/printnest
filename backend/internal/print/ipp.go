@@ -43,10 +43,6 @@ func NewIPPBackend(host string, port int, user string, timeout time.Duration) *I
 	}
 }
 
-func (b *IPPBackend) ippClient() *ipp.IPPClient {
-	return b.client
-}
-
 func attrStr(a ipp.Attributes, key string) string {
 	vals, ok := a[key]
 	if !ok || len(vals) == 0 {
@@ -193,7 +189,7 @@ func (b *IPPBackend) ScanDevices() ([]DeviceInfo, error) {
 }
 
 func (b *IPPBackend) GetCaps(printer string) (Caps, error) {
-	a, err := b.ippClient().GetPrinterAttributes(printer, capsAttrs)
+	a, err := b.client.GetPrinterAttributes(printer, capsAttrs)
 	if err != nil {
 		return Caps{}, asUnresponsive(printer, b.timeout, err)
 	}
@@ -347,11 +343,11 @@ func (b *IPPBackend) submitRaw(printer string, opts PrintOptions, docName string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return 0, ipp.HTTPError{Code: resp.StatusCode}
+		return 0, asUnresponsive(printer, b.timeout, ipp.HTTPError{Code: resp.StatusCode})
 	}
 	ippResp, err := ipp.NewResponseDecoder(resp.Body).Decode(nil)
 	if err != nil {
-		return 0, err
+		return 0, asUnresponsive(printer, b.timeout, err)
 	}
 	if err := ippResp.CheckForErrors(); err != nil {
 		return 0, fmt.Errorf("received error IPP response: %w", err)
@@ -415,13 +411,16 @@ func (b *IPPBackend) Submit(printer, filePath string, opts PrintOptions) (int, e
 	}
 	id, err := b.submitRaw(printer, opts, name, f, int(st.Size()))
 	if err != nil {
+		if IsUnresponsive(err) {
+			return 0, fmt.Errorf("%w · the job may already be queued; check the printer before resubmitting", err)
+		}
 		return 0, err
 	}
 	return id, nil
 }
 
 func (b *IPPBackend) GetJob(cupsJobID int) (JobInfo, error) {
-	a, err := b.ippClient().GetJobAttributes(cupsJobID, []string{
+	a, err := b.client.GetJobAttributes(cupsJobID, []string{
 		"job-id", "job-state", "job-state-reasons", "job-printer-uri", "job-name",
 	})
 	if err != nil {
@@ -438,5 +437,5 @@ func (b *IPPBackend) GetJob(cupsJobID int) (JobInfo, error) {
 }
 
 func (b *IPPBackend) CancelJob(cupsJobID int) error {
-	return asUnresponsive("", b.timeout, b.ippClient().CancelJob(cupsJobID, false))
+	return asUnresponsive("", b.timeout, b.client.CancelJob(cupsJobID, false))
 }

@@ -28,6 +28,15 @@ configure_cups_retries() {
     echo "warning: $conf not found; skipping CUPS retry configuration" >&2
     return 0
   fi
+  if grep -q '^# BEGIN printnest$' "$conf" && ! grep -q '^# END printnest$' "$conf"; then
+    echo "warning: found a broken printnest block in $conf; leaving it untouched" >&2
+    return 0
+  fi
+  mode="$(stat -c '%a' "$conf" 2>/dev/null || echo 0644)"
+  owner="$(stat -c '%u:%g' "$conf" 2>/dev/null || echo 0:0)"
+  backup="${conf}.printnest.orig"
+  [ -f "$backup" ] || cp -p "$conf" "$backup" 2>/dev/null || true
+
   tmp="$(mktemp)"
   awk '
     /^# BEGIN printnest$/ { skip = 1; next }
@@ -42,20 +51,21 @@ JobRetryLimit 3
 JobRetryInterval 30
 # END printnest
 CUPSBLOCK
-  chmod 0644 "$tmp"
-  chown root:root "$tmp" 2>/dev/null || true
-  cp -p "$conf" "${conf}.printnest.bak" 2>/dev/null || true
+  chmod "$mode" "$tmp" 2>/dev/null || chmod 0644 "$tmp"
+  chown "$owner" "$tmp" 2>/dev/null || true
   mv "$tmp" "$conf"
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon "$conf" 2>/dev/null || true
+  fi
   if cupsd -t >/dev/null 2>&1; then
     echo "    CUPS retry config applied: JobRetryLimit 3, JobRetryInterval 30"
   else
-    echo "warning: cupsd rejected the new config, restoring backup" >&2
-    if [ -f "${conf}.printnest.bak" ]; then
-      mv "${conf}.printnest.bak" "$conf"
+    echo "warning: cupsd rejected the new config, restoring $backup" >&2
+    if [ -f "$backup" ]; then
+      mv "$backup" "$conf"
     fi
   fi
 }
-
 detect_arch() {
   case "$(uname -m)" in
     x86_64|amd64) echo amd64 ;;
@@ -170,7 +180,7 @@ main() {
 
   cp "$APP_DIR/deploy/lxc/printnest.service" /etc/systemd/system/printnest.service
   systemctl daemon-reload
-  systemctl enable --now cups
+  systemctl enable cups
   systemctl restart cups
   systemctl enable printnest
   systemctl try-restart printnest
@@ -179,7 +189,7 @@ main() {
   echo "==> Next steps"
   echo "    1. Set the admin password: vi $DATA_DIR/config.env  (PRINTNEST_PASSWORD, read on first start only)"
   echo "    2. systemctl start printnest && systemctl status printnest"
-  echo "    3. Add the printer: lpadmin -p deskjet2700 -E -v ipp://<printer-ip>/ipp/print -m everywhere"
+  echo "    3. Add the printer: lpadmin -p deskjet2700 -E -v ipp://<printer-ip>/ipp/print -m everywhere -o printer-error-policy=retry-job"
   echo "       (fallback: hp-setup -i, then retry with the hplip PPD)"
   echo "    4. Point your nginx HTTPS vhost at http://127.0.0.1:8080 (template: $APP_DIR/deploy/lxc/nginx-snippet.conf)"
 }
