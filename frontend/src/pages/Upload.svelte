@@ -4,6 +4,7 @@
   import JobSummary from '../lib/JobSummary.svelte';
   import { api, type Printer, type Caps, type Job } from '../lib/api';
   import { previewURL, revokeURL, isPDF } from '../lib/preview';
+  import { takeSharedFile } from '../lib/share';
   import {
     fileExt,
     formatBytes,
@@ -75,14 +76,17 @@
     try {
       printers = await api.printers();
       cupsOk = true;
-      if (printers.length) {
-        printer = printers[0].name;
-        await loadCaps();
-      }
     } catch (e: any) {
       cupsOk = false;
       error = e.message;
+      if (e.message === 'unauthorized') return;
     }
+    if (printers.length) {
+      printer = printers[0].name;
+      await loadCaps();
+    }
+    const shared = await takeSharedFile();
+    if (shared) setFile(shared);
   });
 
   onDestroy(() => {

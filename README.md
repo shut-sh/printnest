@@ -115,6 +115,26 @@ bundle again. Package installation still fetches from the distro repositories.
 Admin pages: `/admin/printers` (scan network via CUPS-Get-Devices,
 add with driverless `everywhere`), `/admin/settings` (retention).
 
+## Phone / PWA
+
+Install on Android (Chrome), over HTTPS with a trusted certificate:
+
+1. Open the site and sign in.
+2. Chrome menu > "Install app" (or "Add to Home screen").
+3. Open the installed app once so the service worker takes control.
+4. In Photos, Files, or another app: Share > PrintNest. The shared file lands
+   in the print preview with the printer options ready.
+
+The share target accepts PDF, JPEG, PNG, WebP, HEIC, and HEIF, and uses the first
+file when several are shared. Plain HTTP on a LAN IP will not offer install or
+share, so use the nginx HTTPS vhost.
+
+iOS: Safari > Share > "Add to Home Screen" works, but iOS has no Web Share
+Target, so PrintNest never appears in the iOS share sheet. Use "Choose file",
+which accepts HEIC.
+
+Desktop Chrome/Edge also offer an install button in the address bar.
+
 ## Dev
 
 ```sh

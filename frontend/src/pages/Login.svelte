@@ -1,6 +1,7 @@
 <script lang="ts">
   import Shell from '../lib/Shell.svelte';
   import { api } from '../lib/api';
+  import { hasPendingShare } from '../lib/share';
 
   let password = '';
   let error = '';
@@ -11,7 +12,7 @@
     error = '';
     try {
       await api.login(password);
-      location.href = '/';
+      location.href = (await hasPendingShare()) ? '/?share=1' : '/';
     } catch (e: any) {
       error = e.message || 'login failed';
     } finally {
