@@ -1,4 +1,4 @@
-const CACHE = 'printnest-v1';
+const CACHE = 'printnest-v2';
 const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (e) => {

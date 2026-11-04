@@ -5,6 +5,7 @@ export interface Printer {
   state_reasons: string[];
   device_uri: string;
   uri: string;
+  accepting?: boolean;
 }
 
 export interface Device {
