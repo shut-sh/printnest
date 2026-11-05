@@ -146,7 +146,7 @@ main() {
 
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y cups cups-client libheif-examples imagemagick curl ca-certificates
+  apt-get install -y cups cups-client cups-filters libheif-examples imagemagick curl ca-certificates
   if [ "$INSTALL_HPLIP" = "1" ]; then
     apt-get install -y hplip
   else

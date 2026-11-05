@@ -41,6 +41,9 @@ tar xzf "printnest-$VERSION-linux-$ARCH.tar.gz"
 ./printnest/deploy/lxc/install.sh            # Alpine: sh ./printnest/deploy/lxc/install-alpine.sh
 ```
 
+The installer also adds `cups-filters`, so CUPS converts PDFs for printers that do
+not accept PDF directly (most inkjets, including the DeskJet 2700).
+
 Both options install the same things: `/usr/local/bin/printnest`, the web UI and
 templates under `/opt/printnest`, the config at `/var/lib/printnest/config.env`, and a
 `printnest` service (systemd, or OpenRC on Alpine). The service is enabled but
