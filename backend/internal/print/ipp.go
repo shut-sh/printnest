@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -336,7 +335,10 @@ func (b *IPPBackend) submitRaw(printer string, opts PrintOptions, docName string
 		return 0, err
 	}
 	httpReq.Header.Set("Content-Type", ipp.ContentTypeIPP)
-	httpReq.Header.Set("Content-Length", strconv.Itoa(len(payload)+size))
+	// ContentLength must be set on the request, not as a header: net/http
+	// ignores a manual Content-Length header and would send the body chunked,
+	// which CUPS rejects by closing the connection (surfacing as EOF).
+	httpReq.ContentLength = int64(len(payload) + size)
 	resp, err := b.httpClient.Do(httpReq)
 	if err != nil {
 		return 0, asUnresponsive(printer, b.timeout, err)
@@ -345,7 +347,16 @@ func (b *IPPBackend) submitRaw(printer string, opts PrintOptions, docName string
 	if resp.StatusCode != 200 {
 		return 0, asUnresponsive(printer, b.timeout, ipp.HTTPError{Code: resp.StatusCode})
 	}
-	ippResp, err := ipp.NewResponseDecoder(resp.Body).Decode(nil)
+	// Buffer the response before decoding. CUPS may return the final data and
+	// io.EOF from the same Read, which the IPP state machine treats as a failure.
+	buf := new(bytes.Buffer)
+	if resp.ContentLength > 0 {
+		buf.Grow(int(resp.ContentLength))
+	}
+	if _, err := io.Copy(buf, resp.Body); err != nil {
+		return 0, asUnresponsive(printer, b.timeout, err)
+	}
+	ippResp, err := ipp.NewResponseDecoder(buf).Decode(nil)
 	if err != nil {
 		return 0, asUnresponsive(printer, b.timeout, err)
 	}
