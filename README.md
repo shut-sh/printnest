@@ -6,6 +6,14 @@ network printer (first target: HP DeskJet 2700, A4).
 
 Flow: Choose / Share file -> Preview -> Configure -> Print.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Print screen](docs/screenshots/print.png) | ![Job queue](docs/screenshots/print-job.png) |
+| ![Job status](docs/screenshots/job-status.png) | ![Printers](docs/screenshots/printers.png) |
+| ![Printer discovery](docs/screenshots/discovery.png) | ![Settings](docs/screenshots/settings.png) |
+
 ## Install (native LXC, no Docker)
 
 Works in a Debian/Ubuntu or Alpine LXC on Proxmox, amd64 or arm64. Nothing is
